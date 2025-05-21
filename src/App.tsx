@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { Line, Bar } from 'react-chartjs-2';
+import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
-  BarElement,
   Title,
   Tooltip,
   Legend,
@@ -18,7 +17,6 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
-  BarElement,
   Title,
   Tooltip,
   Legend
@@ -29,71 +27,120 @@ function App() {
   const [nome1, setNome1] = useState('');
   const [nome2, setNome2] = useState('');
   const [uf, setUf] = useState('');
-  const [dadosNome, setDadosNome] = useState<any>(null);
-  const [dadosComparacao, setDadosComparacao] = useState<any>(null);
-  const [dadosLocalidade, setDadosLocalidade] = useState<any>(null);
+  const [dadosNome, setDadosNome] = useState<any[]>([]);
+  const [dadosComparacao, setDadosComparacao] = useState<any[]>([]);
+  const [dadosLocalidade, setDadosLocalidade] = useState<any[]>([]);
 
   const fetchNome = async () => {
-    const res = await fetch(`http://localhost:3000/ibge/nome?nome=${nome}`);
-    const json = await res.json();
-    setDadosNome(json[0].res);
+    setDadosNome([]);
+    try {
+      const res = await fetch(`http://localhost:3000/ibge/name-evolution?name=${nome}`);
+      const json = await res.json();
+      if (json.length > 0) {
+        setDadosNome(json[0].res);
+      } else {
+        setDadosNome([]);
+      }
+    } catch (error) {
+      console.error(error);
+      setDadosNome([]);
+    }
   };
 
   const fetchComparacao = async () => {
-    const res = await fetch(`http://localhost:3000/ibge/comparar?nome1=${nome1}&nome2=${nome2}`);
-    const json = await res.json();
-    setDadosComparacao(json);
+    setDadosComparacao([]);
+    try {
+      const res = await fetch(`http://localhost:3000/ibge/compare-names?name1=${nome1}&name2=${nome2}`);
+      const json = await res.json();
+      setDadosComparacao(json);
+    } catch (error) {
+      console.error(error);
+      setDadosComparacao([]);
+    }
   };
 
   const fetchLocalidade = async () => {
-    const res = await fetch(`http://localhost:3000/ibge/localidade?uf=${uf}`);
-    const json = await res.json();
-    setDadosLocalidade(json);
+    setDadosLocalidade([]);
+    try {
+      const res = await fetch(`http://localhost:3000/ibge/top3-by-location?locationId=${uf}`);
+      const json = await res.json();
+
+      if (Array.isArray(json)) {
+        setDadosLocalidade(json);
+      } else if (json && Array.isArray(json.data)) {
+        setDadosLocalidade(json.data);
+      } else {
+        console.warn('Formato inesperado dos dados de localidade:', json);
+        setDadosLocalidade([]);
+      }
+    } catch (error) {
+      console.error(error);
+      setDadosLocalidade([]);
+    }
   };
 
-  const renderGraficoNome = () => {
-    if (!dadosNome) return null;
-    const labels = dadosNome.map((e: any) => e.periodo);
-    const data = dadosNome.map((e: any) => e.frequencia);
 
-    return <Line data={{
-      labels,
-      datasets: [
-        {
-          label: `Popularidade de ${nome}`,
-          data,
-          borderColor: 'blue',
-          backgroundColor: 'lightblue'
-        }
-      ]
-    }} />
+  const renderGraficoNome = () => {
+    if (!dadosNome || dadosNome.length === 0) return <p>Sem dados para exibir.</p>;
+
+    const labels = dadosNome.map((e) => e.periodo);
+    const data = dadosNome.map((e) => e.frequencia);
+
+    return (
+      <Line
+        data={{
+          labels,
+          datasets: [
+            {
+              label: `Popularidade de ${nome}`,
+              data,
+              borderColor: 'blue',
+              backgroundColor: 'lightblue',
+              fill: false,
+            },
+          ],
+        }}
+        options={{ responsive: true }}
+      />
+    );
   };
 
   const renderComparacao = () => {
-    if (!dadosComparacao) return null;
-    const nome1Data = dadosComparacao[0].res;
-    const nome2Data = dadosComparacao[1].res;
-    const labels = nome1Data.map((e: any) => e.periodo);
+    if (!dadosComparacao || dadosComparacao.length === 0) return <p>Sem dados para exibir.</p>;
 
-    return <Line data={{
-      labels,
-      datasets: [
-        {
-          label: nome1,
-          data: nome1Data.map((e: any) => e.frequencia),
-          borderColor: 'green'
-        },
-        {
-          label: nome2,
-          data: nome2Data.map((e: any) => e.frequencia),
-          borderColor: 'orange'
-        }
-      ]
-    }} />
+    const labels = dadosComparacao.map((item) => item.periodo);
+    const dataNome1 = dadosComparacao.map((item) => item[nome1] || 0);
+    const dataNome2 = dadosComparacao.map((item) => item[nome2] || 0);
+
+    return (
+      <Line
+        data={{
+          labels,
+          datasets: [
+            {
+              label: nome1,
+              data: dataNome1,
+              borderColor: 'green',
+              backgroundColor: 'rgba(0,128,0,0.3)',
+              fill: false,
+            },
+            {
+              label: nome2,
+              data: dataNome2,
+              borderColor: 'orange',
+              backgroundColor: 'rgba(255,165,0,0.3)',
+              fill: false,
+            },
+          ],
+        }}
+        options={{ responsive: true }}
+      />
+    );
   };
 
   const renderTabelaLocalidade = () => {
-    if (!dadosLocalidade) return null;
+    if (!dadosLocalidade || !Array.isArray(dadosLocalidade)) return null;
+
     return (
       <table>
         <thead>
@@ -107,8 +154,8 @@ function App() {
         <tbody>
           {dadosLocalidade.map((entry: any, i: number) => (
             <tr key={i}>
-              <td>{entry.periodo}</td>
-              {entry.ranking.slice(0, 3).map((r: any, j: number) => (
+              <td>{entry.decade}</td>
+              {entry.top3.map((r: any, j: number) => (
                 <td key={j}>{r.nome} ({r.frequencia})</td>
               ))}
             </tr>
@@ -118,6 +165,8 @@ function App() {
     );
   };
 
+
+
   return (
     <div className="App">
       <h1>Sistema SOA - Tendência de Nomes</h1>
@@ -125,7 +174,9 @@ function App() {
       <section>
         <h2>Evolução de um nome</h2>
         <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Digite um nome" />
-        <button onClick={fetchNome}>Buscar</button>
+        <button onClick={fetchNome} disabled={!nome.trim()}>
+          Buscar
+        </button>
         {renderGraficoNome()}
       </section>
 
@@ -133,14 +184,18 @@ function App() {
         <h2>Comparar dois nomes</h2>
         <input value={nome1} onChange={(e) => setNome1(e.target.value)} placeholder="Nome 1" />
         <input value={nome2} onChange={(e) => setNome2(e.target.value)} placeholder="Nome 2" />
-        <button onClick={fetchComparacao}>Comparar</button>
+        <button onClick={fetchComparacao} disabled={!nome1.trim() || !nome2.trim()}>
+          Comparar
+        </button>
         {renderComparacao()}
       </section>
 
       <section>
         <h2>Ranking por Localidade</h2>
         <input value={uf} onChange={(e) => setUf(e.target.value)} placeholder="UF (ex: 35)" />
-        <button onClick={fetchLocalidade}>Buscar</button>
+        <button onClick={fetchLocalidade} disabled={!uf.trim()}>
+          Buscar
+        </button>
         {renderTabelaLocalidade()}
       </section>
     </div>
